@@ -1,0 +1,17 @@
+gala (0.1.0~r381+pkg23~ubuntu14.10.1+blankon1) tambora; urgency=medium
+
+  * Initial release
+
+ -- mijortsa <azis.astrojim@surabaya.di.blankon.in>  Mon, 16 Jun 2014 19:53:30 +0700
+
+gala (0.1.0~r381+pkg23~ubuntu14.10.1) utopic; urgency=low
+
+  * Auto build.
+
+ -- Launchpad Package Builder <noreply@launchpad.net>  Tue, 03 Jun 2014 19:33:54 +0000
+
+gala (0.1) UNRELEASED; urgency=low
+
+  * Initial release.
+
+ -- Sergey "Shnatsel" Davidoff <shnatsel@gmail.com>  Wed, 23 May 2012 16:19:58 +0400
