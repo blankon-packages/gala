@@ -1,3 +1,10 @@
+gala (0.1.0~r381+pkg23~ubuntu14.10.1+blankon2) tambora; urgency=medium
+
+  * org.pantheon.desktop.gala.gschema button-layout :
+    - :minimize,maximize,close
+
+ -- mijortsa <azis.astrojim@surabaya.di.blankon.in>  Tue, 17 Jun 2014 20:06:55 +0700
+
 gala (0.1.0~r381+pkg23~ubuntu14.10.1+blankon1) tambora; urgency=medium
 
   * Initial release
