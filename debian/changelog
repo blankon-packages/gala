@@ -1,3 +1,10 @@
+gala (0.1.0~r381+pkg23~ubuntu14.10.1+blankon3) tambora; urgency=medium
+
+  * debian/control:
+    - change libmutter-dev (>= 3.8.0) to libmutter-dev (>= 3.14.0)
+
+ -- mijortsa <azis.astrojim@surabaya.di.blankon.in>  Wed, 01 Oct 2014 22:47:11 +0700
+
 gala (0.1.0~r381+pkg23~ubuntu14.10.1+blankon2) tambora; urgency=medium
 
   * org.pantheon.desktop.gala.gschema button-layout :

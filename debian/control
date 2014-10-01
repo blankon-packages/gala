@@ -14,7 +14,7 @@ Build-Depends: debhelper (>= 9),
                libgnome-desktop-3-dev,
                libgranite-dev,
                libgtk-3-dev (>= 3.4.0),
-               libmutter-dev (>= 3.8.4),
+               libmutter-dev (>= 3.14.0),
                libplank-dev (>= 0.3.0),
                valac (>= 0.22.0)
 Standards-Version: 3.9.5
