@@ -127,8 +127,8 @@ GALA_CORE_VALA_PKGS="--pkg gio-unix-2.0 \
                       --pkg xfixes-4.0 \
                       --pkg plank"
 
-VALAFLAGS="$VALAFLAGS --thread --target-glib=2.32"
-
+VALAFLAGS="--target-glib=2.32"
+VALAFLAGS_CORE="--thread"
 
 PKG_CHECK_MODULES(GALA_CORE, $GALA_CORE_PKGS)
 
@@ -151,7 +151,7 @@ fi
 # 3.12
 PKG_CHECK_MODULES(MUTTER312, [libmutter >= 3.11], [have_mutter312=yes], [have_mutter312=no])
 if test "x$have_mutter312" = "xyes" ; then
-    PKG_CHECK_MODULES(MUTTER312, [libmutter >= 3.11.91])
+    PKG_CHECK_MODULES(MUTTER312, [libmutter >= 3.12.2])
     VALAFLAGS="$VALAFLAGS --define HAS_MUTTER312"
     MUTTER_API="3.12"
 fi
@@ -159,13 +159,36 @@ fi
 # 3.14
 PKG_CHECK_MODULES(MUTTER314, [libmutter >= 3.13], [have_mutter314=yes], [have_mutter314=no])
 if test "x$have_mutter314" = "xyes" ; then
-    PKG_CHECK_MODULES(MUTTER314, [libmutter >= 3.13.2])
+    PKG_CHECK_MODULES(MUTTER314, [libmutter >= 3.14.0])
     VALAFLAGS="$VALAFLAGS --define HAS_MUTTER314"
     MUTTER_API="3.14"
 fi
+AM_CONDITIONAL([HAVE_MUTTER314], [test "x$have_mutter314" = "xyes"])
+
+# 3.16
+PKG_CHECK_MODULES(MUTTER316, [libmutter >= 3.15], [have_mutter316=yes], [have_mutter316=no])
+if test "x$have_mutter316" = "xyes" ; then
+    PKG_CHECK_MODULES(MUTTER316, [libmutter >= 3.15.2])
+    VALAFLAGS="$VALAFLAGS --define HAS_MUTTER316"
+    MUTTER_API="3.16"
+fi
 
 # -----------------------------------------------------------
-# Addional configure flags
+# Dependencies for Notifications plugin
+# -----------------------------------------------------------
+
+NOTIFICATION_PLUGIN_PKGS="libcanberra \
+                          libcanberra-gtk3"
+
+NOTIFICATION_PLUGIN_VALA_PKGS="--pkg libcanberra \
+                               --pkg libcanberra-gtk"
+
+PKG_CHECK_MODULES(NOTIFICAION_PLUGIN, $NOTIFICATION_PLUGIN_PKGS)
+
+AC_SUBST([NOTIFICATION_PLUGIN_VALA_PKGS])
+
+# -----------------------------------------------------------
+# Additional configure flags
 # -----------------------------------------------------------
 
 # Enable Vala debug-flag by default for non-release builds
@@ -173,11 +196,44 @@ AC_ARG_ENABLE([debug],
               AS_HELP_STRING([--disable-debug],[compile without debug code]),
               [enable_debug=$enableval], [m4_if(gala_released, [1], [enable_debug=no], [enable_debug=yes])])
 if test "x$enable_debug" = "xyes" ; then
-    VALAFLAGS="$VALAFLAGS -g"
+    VALAFLAGS_CORE="$VALAFLAGS_CORE -g"
 fi
 
-GALA_CORE_VALAFLAGS="$VALAFLAGS $GALA_CORE_VALA_PKGS"
+GALA_CORE_VALAFLAGS="$VALAFLAGS $VALAFLAGS_CORE $GALA_CORE_VALA_PKGS"
 AC_SUBST(GALA_CORE_VALAFLAGS)
+GALA_DOCS_VALAFLAGS="$VALAFLAGS $GALA_CORE_VALA_PKGS"
+AC_SUBST(GALA_DOCS_VALAFLAGS)
+
+# -----------------------------------------------------------
+# Additional build flags
+# -----------------------------------------------------------
+
+# Use RUNPATH instead of RPATH if needed
+CFLAGS="$CFLAGS -Wl,--enable-new-dtags"
+
+# -----------------------------------------------------------
+# Documentation
+# -----------------------------------------------------------
+VALADOC_MIN_VERSION=0.3.1
+
+AC_ARG_ENABLE([docs],
+              AS_HELP_STRING([--enable-docs],[Enable documentation generation]),
+              [enable_docs=$enableval], [enable_docs=no])
+AM_CONDITIONAL([ENABLE_DOCS], [test "x$enable_docs" = "xyes"])
+
+have_valadoc=no
+if test "x$enable_docs" = "xyes"; then
+    # make sure the library is new enough and the program exists
+    PKG_CHECK_MODULES([VALADOC], [valadoc-1.0 >= $VALADOC_MIN_VERSION])
+    AC_PATH_PROG([VALADOC], [valadoc], [:])
+    AS_IF([test "$VALADOC" != :], have_valadoc=yes)
+fi
+AM_CONDITIONAL([HAVE_VALADOC], [test "x$have_valadoc" = "xyes"])
+
+if test "x$enable_docs" = "xyes" -a "x$have_valadoc" != "xyes"; then
+    AC_MSG_ERROR([Doc building requested but valadoc not installed.])
+fi
+
 
 # -----------------------------------------------------------
 # Gettext
@@ -195,9 +251,13 @@ AC_CONFIG_FILES([
 Makefile
 src/Makefile
 lib/Makefile
+docs/Makefile
 data/Makefile
+data/org.pantheon.desktop.gala.gschema.xml.in
+data/icons/Makefile
 vapi/Makefile
 plugins/Makefile
+plugins/notify/Makefile
 plugins/zoom/Makefile
 po/Makefile.in
 ])
@@ -213,4 +273,6 @@ ${PACKAGE} ${VERSION}
     C Compiler Flags............:  ${CFLAGS}
 
     Using Mutter................:  ${MUTTER_API}
+
+    Documentation...............:  ${have_valadoc}
 "

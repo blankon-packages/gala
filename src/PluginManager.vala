@@ -100,7 +100,7 @@ namespace Gala
 				warning ("%s failed to register: register_plugin() function not found", plugin_name);
 				return false;
 			}
-			RegisterPluginFunction register = (RegisterPluginFunction)function;
+			unowned RegisterPluginFunction register = (RegisterPluginFunction)function;
 
 			var info = register ();
 			if (info.plugin_type.is_a (typeof (Plugin)) == false) {
@@ -199,6 +199,11 @@ namespace Gala
 			load_later_plugins.clear ();
 		}
 
+		public Plugin? get_plugin (string id)
+		{
+			return plugins.lookup (id);
+		}
+
 		/**
 		 * Iterate over all plugins and grab their regions, update the regions
 		 * array accordingly and emit the regions_changed signal.
@@ -208,8 +213,16 @@ namespace Gala
 			X.Xrectangle[] regions = {};
 
 			plugins.@foreach ((name, plugin) => {
-				foreach (var region in plugin.region)
-					regions += region;
+				foreach (var region in plugin.region) {
+					X.Xrectangle rect = {
+						(short) region.x,
+						(short) region.y,
+						(ushort) region.width,
+						(ushort) region.height
+					};
+
+					regions += rect;
+				}
 			});
 
 			this.regions = regions;

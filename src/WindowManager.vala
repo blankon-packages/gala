@@ -1,5 +1,5 @@
 //
-//  Copyright (C) 2012 Tom Beckmann, Rico Tzschichholz
+//  Copyright (C) 2012-2014 Tom Beckmann, Rico Tzschichholz
 //
 //  This program is free software: you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -21,17 +21,36 @@ namespace Gala
 {
 	public class WindowManagerGala : Meta.Plugin, WindowManager
 	{
+		/**
+		 * {@inheritDoc}
+		 */
 		public Clutter.Actor ui_group { get; protected set; }
+
+		/**
+		 * {@inheritDoc}
+		 */
 		public Clutter.Stage stage { get; protected set; }
+
+		/**
+		 * {@inheritDoc}
+		 */
 		public Clutter.Actor window_group { get; protected set; }
+
+		/**
+		 * {@inheritDoc}
+		 */
 		public Clutter.Actor top_window_group { get; protected set; }
+
+		/**
+		 * {@inheritDoc}
+		 */
 		public Meta.BackgroundGroup background_group { get; protected set; }
 
 		Meta.PluginInfo info;
 
 		WindowSwitcher? winswitcher = null;
-		WorkspaceView? workspace_view = null;
-		WindowOverview? window_overview = null;
+		ActivatableComponent? workspace_view = null;
+		ActivatableComponent? window_overview = null;
 
 		// used to detect which corner was used to trigger an action
 		Clutter.Actor? last_hotcorner;
@@ -39,13 +58,16 @@ namespace Gala
 
 		Window? moving; //place for the window that is being moved over
 
-		int modal_count = 0; //count of modal modes overlaying each other
+		Gee.LinkedList<ModalProxy> modal_stack = new Gee.LinkedList<ModalProxy> ();
 
 		Gee.HashSet<Meta.WindowActor> minimizing = new Gee.HashSet<Meta.WindowActor> ();
 		Gee.HashSet<Meta.WindowActor> maximizing = new Gee.HashSet<Meta.WindowActor> ();
 		Gee.HashSet<Meta.WindowActor> unmaximizing = new Gee.HashSet<Meta.WindowActor> ();
 		Gee.HashSet<Meta.WindowActor> mapping = new Gee.HashSet<Meta.WindowActor> ();
 		Gee.HashSet<Meta.WindowActor> destroying = new Gee.HashSet<Meta.WindowActor> ();
+#if HAS_MUTTER314
+		Gee.HashSet<Meta.WindowActor> unminimizing = new Gee.HashSet<Meta.WindowActor> ();
+#endif
 
 		public WindowManagerGala ()
 		{
@@ -70,8 +92,10 @@ namespace Gala
 			var screen = get_screen ();
 
 			DBus.init (this);
-			EndSessionDialog.register (this);
+#if !HAS_MUTTER314
 			BackgroundCache.init (screen);
+#endif
+			WindowListener.init (screen);
 
 			// Due to a bug which enables access to the stage when using multiple monitors
 			// in the screensaver, we have to listen for changes and make sure the input area
@@ -90,8 +114,7 @@ namespace Gala
 			var color = BackgroundSettings.get_default ().primary_color;
 			stage.background_color = Clutter.Color.from_string (color);
 
-			if (Prefs.get_dynamic_workspaces ())
-				screen.override_workspace_layout (ScreenCorner.TOPLEFT, false, 1, -1);
+			WorkspaceManager.init (this);
 
 			/* our layer structure, copied from gnome-shell (from bottom to top):
 			 * stage
@@ -103,7 +126,11 @@ namespace Gala
 			 * +-- top window group
 		     */
 
+#if HAS_MUTTER314
+			var system_background = new SystemBackground (screen);
+#else
 			var system_background = new SystemBackground ();
+#endif
 			system_background.add_constraint (new Clutter.BindConstraint (stage,
 				Clutter.BindCoordinate.ALL, 0));
 			stage.insert_child_below (system_background, null);
@@ -116,7 +143,11 @@ namespace Gala
 			stage.remove_child (window_group);
 			ui_group.add_child (window_group);
 
+#if HAS_MUTTER314
+			background_group = new BackgroundContainer (screen);
+#else
 			background_group = new BackgroundManager (screen);
+#endif
 			window_group.add_child (background_group);
 			window_group.set_child_below_sibling (background_group, null);
 
@@ -200,37 +231,50 @@ namespace Gala
 			plugin_manager.initialize (this);
 			plugin_manager.regions_changed.connect (update_input_area);
 
-			if (plugin_manager.workspace_view_provider == null) {
-				workspace_view = new WorkspaceView (this);
-				workspace_view.visible = false;
-				ui_group.add_child (workspace_view);
-
-				KeyBinding.set_custom_handler ("show-desktop", () => {
-					workspace_view.show (true);
-				});
+			if (plugin_manager.workspace_view_provider == null
+				|| (workspace_view = (plugin_manager.get_plugin (plugin_manager.workspace_view_provider) as ActivatableComponent)) == null) {
+				workspace_view = new MultitaskingView (this);
+				ui_group.add_child ((Clutter.Actor) workspace_view);
 			}
+
+			KeyBinding.set_custom_handler ("show-desktop", () => {
+				if (workspace_view.is_opened ())
+					workspace_view.close ();
+				else
+					workspace_view.open ();
+			});
 
 			if (plugin_manager.window_switcher_provider == null) {
 				winswitcher = new WindowSwitcher (this);
 				ui_group.add_child (winswitcher);
 
-				//FIXME we have to investigate this. Apparently alt-tab is now bound to switch-applications
-				// instead of windows, which we should probably handle too
 				KeyBinding.set_custom_handler ("switch-applications", winswitcher.handle_switch_windows);
 				KeyBinding.set_custom_handler ("switch-applications-backward", winswitcher.handle_switch_windows);
+				KeyBinding.set_custom_handler ("switch-windows", winswitcher.handle_switch_windows);
+				KeyBinding.set_custom_handler ("switch-windows-backward", winswitcher.handle_switch_windows);
 			}
 
-			if (plugin_manager.window_overview_provider == null) {
+			if (plugin_manager.window_overview_provider == null
+				|| (window_overview = (plugin_manager.get_plugin (plugin_manager.window_overview_provider) as ActivatableComponent)) == null) {
 				window_overview = new WindowOverview (this);
-				ui_group.add_child (window_overview);
-
-				screen.get_display ().add_keybinding ("expose-windows", KeybindingSettings.get_default ().schema, 0, () => {
-					window_overview.open (true);
-				});
-				screen.get_display ().add_keybinding ("expose-all-windows", KeybindingSettings.get_default ().schema, 0, () => {
-					window_overview.open (true, true);
-				});
+				ui_group.add_child ((Clutter.Actor) window_overview);
 			}
+
+			screen.get_display ().add_keybinding ("expose-windows", KeybindingSettings.get_default ().schema, 0, () => {
+				if (window_overview.is_opened ())
+					window_overview.close ();
+				else
+					window_overview.open ();
+			});
+			screen.get_display ().add_keybinding ("expose-all-windows", KeybindingSettings.get_default ().schema, 0, () => {
+				if (window_overview.is_opened ())
+					window_overview.close ();
+				else {
+					var hints = new HashTable<string,Variant> (str_hash, str_equal);
+					hints.@set ("all-windows", true);
+					window_overview.open (hints);
+				}
+			});
 
 			update_input_area ();
 
@@ -297,34 +341,44 @@ namespace Gala
 			switch_to_next_workspace (direction);
 		}
 
+		/**
+		 * {@inheritDoc}
+		 */
 		public void switch_to_next_workspace (MotionDirection direction)
 		{
 			var screen = get_screen ();
 			var display = screen.get_display ();
-			var old_index = screen.get_active_workspace_index ();
-			var neighbor = screen.get_active_workspace ().get_neighbor (direction);
+			var active_workspace = screen.get_active_workspace ();
+			var neighbor = active_workspace.get_neighbor (direction);
 
-			neighbor.activate (display.get_current_time ());
-
-			// if we didnt switch, show a nudge-over animation. need to take the indices
-			// here since the changing only applies after the animation ends
-			if ((old_index == 0
-				&& direction == MotionDirection.LEFT)
-				|| (old_index == screen.n_workspaces - 1
-				&& direction == MotionDirection.RIGHT)) {
-
-				var dest = (direction == MotionDirection.LEFT ? 32.0f : -32.0f);
-				ui_group.animate (Clutter.AnimationMode.LINEAR, 100, x:dest);
-				Timeout.add (210, () => {
-					ui_group.animate (Clutter.AnimationMode.LINEAR, 150, x:0.0f);
-					return false;
-				});
+			if (neighbor != active_workspace) {
+				neighbor.activate (display.get_current_time ());
+				return;
 			}
+
+			// if we didnt switch, show a nudge-over animation if one is not already in progress
+			if (ui_group.get_transition ("nudge") != null)
+				return;
+
+			var dest = (direction == MotionDirection.LEFT ? 32.0f : -32.0f);
+
+			double[] keyframes = { 0.28, 0.58 };
+			GLib.Value[] x = { dest, dest };
+
+			var nudge = new Clutter.KeyframeTransition ("x");
+			nudge.duration = 360;
+			nudge.remove_on_complete = true;
+			nudge.progress_mode = Clutter.AnimationMode.LINEAR;
+			nudge.set_from_value (0.0f);
+			nudge.set_to_value (0.0f);
+			nudge.set_key_frames (keyframes);
+			nudge.set_values (x);
+
+			ui_group.add_transition ("nudge", nudge);
 		}
 
-		public void update_input_area ()
+		void update_input_area ()
 		{
-			var schema = BehaviorSettings.get_default ().schema;
 			var screen = get_screen ();
 
 			if (screensaver != null) {
@@ -333,18 +387,18 @@ namespace Gala
 						InternalUtils.set_input_area (screen, InputArea.NONE);
 						return;
 					}
-				} catch (IOError e) { warning (e.message); }
+				} catch (Error e) {
+					// the screensaver object apparently won't be null even though
+					// it is unavailable. This error will be thrown however, so we
+					// can just ignore it, because if it is thrown, the screensaver
+					// is unavailable.
+				}
 			}
 
-			if (modal_count > 0)
+			if (is_modal ())
 				InternalUtils.set_input_area (screen, InputArea.FULLSCREEN);
-			else if (schema.get_enum ("hotcorner-topleft") != ActionType.NONE ||
-				schema.get_enum ("hotcorner-topright") != ActionType.NONE ||
-				schema.get_enum ("hotcorner-bottomleft") != ActionType.NONE ||
-				schema.get_enum ("hotcorner-bottomright") != ActionType.NONE)
-				InternalUtils.set_input_area (screen, InputArea.HOT_CORNER);
 			else
-				InternalUtils.set_input_area (screen, InputArea.NONE);
+				InternalUtils.set_input_area (screen, InputArea.DEFAULT);
 		}
 
 		public uint32[] get_all_xids ()
@@ -371,6 +425,9 @@ namespace Gala
 			screen.get_workspace_by_index (index).activate (screen.get_display ().get_current_time ());
 		}
 
+		/**
+		 * {@inheritDoc}
+		 */
 		public void move_window (Window? window, MotionDirection direction)
 		{
 			if (window == null)
@@ -396,36 +453,69 @@ namespace Gala
 			next.activate_with_focus (window, display.get_current_time ());
 		}
 
-		public new void begin_modal ()
+		/**
+		 * {@inheritDoc}
+		 */
+		public ModalProxy push_modal ()
 		{
-			modal_count ++;
-			if (modal_count > 1)
-				return;
+			var proxy = new ModalProxy ();
+
+			modal_stack.offer_head (proxy);
+
+			// modal already active
+			if (modal_stack.size >= 2)
+				return proxy;
 
 			var screen = get_screen ();
-			var display = screen.get_display ();
+			var time = screen.get_display ().get_current_time ();
 
 			update_input_area ();
 #if HAS_MUTTER310
-			base.begin_modal (0, display.get_current_time ());
+			begin_modal (0, time);
 #else
-			base.begin_modal (x_get_stage_window (Compositor.get_stage_for_screen (screen)), {}, 0, display.get_current_time ());
+			begin_modal (x_get_stage_window (Compositor.get_stage_for_screen (screen)), {}, 0, time);
 #endif
 
 			Meta.Util.disable_unredirect_for_screen (screen);
+
+			return proxy;
 		}
 
-		public new void end_modal ()
+		/**
+		 * {@inheritDoc}
+		 */
+		public void pop_modal (ModalProxy proxy)
 		{
-			modal_count --;
-			if (modal_count > 0)
+			if (!modal_stack.remove (proxy)) {
+				warning ("Attempted to remove a modal proxy that was not in the stack");
+				return;
+			}
+
+			if (is_modal ())
 				return;
 
 			update_input_area ();
 
 			var screen = get_screen ();
-			base.end_modal (screen.get_display ().get_current_time ());
+			end_modal (screen.get_display ().get_current_time ());
+
 			Meta.Util.enable_unredirect_for_screen (screen);
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		public bool is_modal ()
+		{
+			return (modal_stack.size > 0);
+		}
+
+		/**
+		 * {@inheritDoc}
+		 */
+		public bool modal_proxy_valid (ModalProxy proxy)
+		{
+			return (proxy in modal_stack);
 		}
 
 		public void get_current_cursor_position (out int x, out int y)
@@ -446,6 +536,9 @@ namespace Gala
 				win.clear_effects ();*/
 		}
 
+		/**
+		 * {@inheritDoc}
+		 */
 		public void perform_action (ActionType type)
 		{
 			var screen = get_screen ();
@@ -454,7 +547,13 @@ namespace Gala
 
 			switch (type) {
 				case ActionType.SHOW_WORKSPACE_VIEW:
-					workspace_view.show ();
+					if (workspace_view == null)
+						break;
+
+					if (workspace_view.is_opened ())
+						workspace_view.close ();
+					else
+						workspace_view.open ();
 					break;
 				case ActionType.MAXIMIZE_CURRENT:
 					if (current == null || current.window_type != WindowType.NORMAL)
@@ -505,16 +604,68 @@ namespace Gala
 					}
 					break;
 				case ActionType.WINDOW_OVERVIEW:
-					window_overview.open (true);
+					if (window_overview == null)
+						break;
+
+					if (window_overview.is_opened ())
+						window_overview.close ();
+					else
+						window_overview.open ();
 					break;
 				case ActionType.WINDOW_OVERVIEW_ALL:
-					window_overview.open (true, true);
+					if (window_overview == null)
+						break;
+
+					if (window_overview.is_opened ())
+						window_overview.close ();
+					else {
+						var hints = new HashTable<string,Variant> (str_hash, str_equal);
+						hints.@set ("all-windows", true);
+						window_overview.open (hints);
+					}
 					break;
 				default:
 					warning ("Trying to run unknown action");
 					break;
 			}
 		}
+
+#if HAS_MUTTER314
+		WindowMenu? window_menu = null;
+
+		public override void show_window_menu (Meta.Window window, Meta.WindowMenuType menu, int x, int y)
+		{
+#if false
+			// Spawning native menus inside mutter appears to be no longer working, mouse
+			// event are apparently never delivered to the menu. Until this is fixed, we
+			// disable windowmenus all together
+
+			var time = get_screen ().get_display ().get_current_time_roundtrip ();
+
+			switch (menu) {
+				case WindowMenuType.WM:
+					if (window_menu == null)
+						window_menu = new WindowMenu ();
+
+					window_menu.current_window = window;
+					window_menu.show_all ();
+					window_menu.popup (null, null, (menu, out menu_x, out menu_y, out push_in) => {
+						menu_x = x;
+						menu_y = y;
+					}, Gdk.BUTTON_SECONDARY, time);
+					break;
+				case WindowMenuType.APP:
+					// FIXME we don't have any sort of app menus
+					break;
+			}
+#endif
+		}
+
+		public override void show_window_menu_for_rect (Meta.Window window, Meta.WindowMenuType menu, Meta.Rectangle rect)
+		{
+			show_window_menu (window, menu, rect.x, rect.y);
+		}
+#endif
 
 		/*
 		 * effects
@@ -536,20 +687,22 @@ namespace Gala
 			get_screen ().get_size (out width, out height);
 
 			Rectangle icon = {};
-			//FIXME don't use the icon geometry, since it seems broken right now
-			if (false && actor.get_meta_window ().get_icon_geometry (out icon)) {
+			if (actor.get_meta_window ().get_icon_geometry (out icon)) {
 
 				float scale_x  = (float)icon.width  / actor.width;
 				float scale_y  = (float)icon.height / actor.height;
 				float anchor_x = (float)(actor.x - icon.x) * actor.width  / (icon.width  - actor.width);
 				float anchor_y = (float)(actor.y - icon.y) * actor.height / (icon.height - actor.height);
 
-				actor.move_anchor_point (anchor_x, anchor_y);
+				// FIXME set_pivot_point appears to show weird behavior for negative values, which we will need
+				//       in some cases. scale_center_{x,y} works fine so far.
+				actor.scale_center_x = anchor_x;
+				actor.scale_center_y = anchor_y;
+
 				actor.animate (Clutter.AnimationMode.EASE_IN_EXPO, AnimationSettings.get_default ().minimize_duration,
-					scale_x:scale_x, scale_y:scale_y,opacity:0)
-					.completed.connect (() => {
-					//FIXME once we enable this part and we still haven't found a fix for below issue, add the idle here too
-					actor.anchor_gravity = Clutter.Gravity.NORTH_WEST;
+					scale_x:scale_x, scale_y:scale_y,opacity:0).completed.connect (() => {
+
+					actor.scale_center_x = actor.scale_center_y = 0;
 					actor.opacity = 255;
 					actor.scale_x = 1.0;
 					actor.scale_y = 1.0;
@@ -560,20 +713,16 @@ namespace Gala
 			} else {
 				actor.scale_center_x = width / 2.0f - actor.x;
 				actor.scale_center_y = height - actor.y;
+
 				actor.animate (Clutter.AnimationMode.EASE_IN_EXPO, AnimationSettings.get_default ().minimize_duration,
-					scale_x : 0.0f, scale_y : 0.0f, opacity : 0)
-					.completed.connect (() => {
-					//FIXME for unknown reasons clutter won't apply properties that are changed here,
-					//      so we got to use an idle
-					Idle.add (() => {
-						actor.scale_gravity = Clutter.Gravity.NORTH_WEST;
-						actor.opacity = 255;
-						actor.scale_x = 1.0;
-						actor.scale_y = 1.0;
-						minimize_completed (actor);
-						minimizing.remove (actor);
-						return false;
-					});
+					scale_x : 0.0f, scale_y : 0.0f, opacity : 0).completed.connect (() => {
+
+					actor.set_pivot_point (0, 0);
+					actor.opacity = 255;
+					actor.scale_x = 1.0;
+					actor.scale_y = 1.0;
+					minimize_completed (actor);
+					minimizing.remove (actor);
 				});
 			}
 		}
@@ -619,6 +768,49 @@ namespace Gala
 
 			maximize_completed (actor);
 		}
+
+#if HAS_MUTTER314
+		public override void unminimize (WindowActor actor)
+		{
+			if (!AnimationSettings.get_default ().enable_animations) {
+				actor.show ();
+				unminimize_completed (actor);
+				return;
+			}
+
+			var window = actor.get_meta_window ();
+
+			actor.detach_animation ();
+			actor.show ();
+
+			switch (window.window_type) {
+				case WindowType.NORMAL:
+					if (AnimationSettings.get_default ().minimize_duration == 0) {
+						unminimize_completed (actor);
+						return;
+					}
+
+					unminimizing.add (actor);
+
+					actor.scale_gravity = Clutter.Gravity.SOUTH;
+					actor.scale_x = 0.01f;
+					actor.scale_y = 0.1f;
+					actor.opacity = 0;
+					actor.animate (Clutter.AnimationMode.EASE_OUT_EXPO, AnimationSettings.get_default ().minimize_duration,
+						scale_x:1.0f, scale_y:1.0f, opacity:255)
+						.completed.connect ( () => {
+
+						unminimizing.remove (actor);
+						unminimize_completed (actor);
+					});
+
+					break;
+				default:
+					unminimize_completed (actor);
+					break;
+			}
+		}
+#endif
 
 		public override void map (WindowActor actor)
 		{
@@ -843,6 +1035,10 @@ namespace Gala
 		{
 			if (end_animation (ref mapping, actor))
 				map_completed (actor);
+#if HAS_MUTTER314
+			if (end_animation (ref unminimizing, actor))
+				unminimize_completed (actor);
+#endif
 			if (end_animation (ref minimizing, actor))
 				minimize_completed (actor);
 			if (end_animation (ref maximizing, actor))
@@ -854,112 +1050,125 @@ namespace Gala
 		}
 
 		/*workspace switcher*/
-		List<WindowActor>? win;
-		List<Clutter.Actor>? par; //class space for kill func
-		List<Clutter.Actor>? clones;
-		Clutter.Actor? in_group;
-		Clutter.Actor? out_group;
-		Clutter.Actor? moving_window_container;
-
-		void watch_window (Meta.Workspace workspace, Meta.Window window)
-		{
-			if (clones == null) {
-				critical ("watch_window called on '%s' while not switching workspaces", window.get_title ());
-				return;
-			}
-
-			warning ("Dock window '%s' closed while switching workspaces", window.get_title ());
-
-			// finding the correct window here is not so easy
-			// and for those default 400ms we can live with
-			// some windows disappearing which in fact should never
-			// happen unless a dock crashes
-			foreach (var clone in clones) {
-				clone.destroy ();
-			}
-			clones = null;
-		}
+		List<Clutter.Actor>? windows;
+		List<Clutter.Actor>? parents;
+		List<Clutter.Actor>? tmp_actors;
 
 		public override void switch_workspace (int from, int to, MotionDirection direction)
 		{
-			if (!AnimationSettings.get_default ().enable_animations || AnimationSettings.get_default ().workspace_switch_duration == 0) {
+			if (!AnimationSettings.get_default ().enable_animations
+				|| AnimationSettings.get_default ().workspace_switch_duration == 0
+				|| (direction != MotionDirection.LEFT && direction != MotionDirection.RIGHT)) {
 				switch_workspace_completed ();
 				return;
 			}
 
+			float screen_width, screen_height;
 			var screen = get_screen ();
+			var primary = screen.get_primary_monitor ();
+			var move_primary_only = InternalUtils.workspaces_only_on_primary ();
+			var monitor_geom = screen.get_monitor_geometry (primary);
 
-			unowned Meta.Workspace wp_from = screen.get_workspace_by_index (from);
-			unowned Meta.Workspace wp_to = screen.get_workspace_by_index (to);
+			screen.get_size (out screen_width, out screen_height);
 
-			unowned List<WindowActor> windows = Compositor.get_window_actors (screen);
-			float w, h;
-			screen.get_size (out w, out h);
+			unowned Meta.Workspace workspace_from = screen.get_workspace_by_index (from);
+			unowned Meta.Workspace workspace_to = screen.get_workspace_by_index (to);
 
-			var x2 = 0.0f; var y2 = 0.0f;
-			if (direction == MotionDirection.LEFT)
-				x2 = w;
-			else if (direction == MotionDirection.RIGHT)
-				x2 = -w;
-			else
-				return;
+			var main_container = new Clutter.Actor ();
+			var static_windows = new Clutter.Actor ();
+			var in_group  = new Clutter.Actor ();
+			var out_group = new Clutter.Actor ();
+			windows = new List<WindowActor> ();
+			parents = new List<Clutter.Actor> ();
+			tmp_actors = new List<Clutter.Clone> ();
 
-			var group = Compositor.get_window_group_for_screen (screen);
-			var wallpaper = background_group;
+			tmp_actors.append (main_container);
+			tmp_actors.append (in_group);
+			tmp_actors.append (out_group);
+			tmp_actors.append (static_windows);
 
-			in_group  = new Clutter.Actor ();
-			out_group = new Clutter.Actor ();
-			win = new List<WindowActor> ();
-			par = new List<Clutter.Actor> ();
-			clones = new List<Clutter.Clone> ();
+			window_group.add_child (main_container);
+
+			// prepare wallpaper
+			Clutter.Actor wallpaper;
+			if (move_primary_only) {
+				wallpaper = background_group.get_child_at_index (primary);
+				wallpaper.set_data<int> ("prev-x", (int) wallpaper.x);
+			} else
+				wallpaper = background_group;
+
+			windows.append (wallpaper);
+			parents.append (wallpaper.get_parent ());
 
 			var wallpaper_clone = new Clutter.Clone (wallpaper);
-			wallpaper_clone.x = (x2 < 0 ? w : -w);
+			tmp_actors.append (wallpaper_clone);
 
-			clones.append (wallpaper_clone);
+			clutter_actor_reparent (wallpaper, main_container);
+			main_container.add_child (wallpaper_clone);
+			main_container.add_child (out_group);
+			main_container.add_child (in_group);
+			main_container.add_child (static_windows);
 
-			group.add_child (wallpaper_clone);
-			group.add_child (in_group);
-			group.add_child (out_group);
-
-			WindowActor moving_actor = null;
 			if (moving != null) {
-				moving_actor = moving.get_compositor_private () as WindowActor;
+				var moving_actor = (WindowActor) moving.get_compositor_private ();
 
-				win.append (moving_actor);
-				par.append (moving_actor.get_parent ());
+				windows.append (moving_actor);
+				parents.append (moving_actor.get_parent ());
 
-				// for some reason the actor alone won't stay where it should, only in a container
-				moving_window_container = new Clutter.Actor ();
-				clutter_actor_reparent (moving_actor, moving_window_container);
-				group.add_child (moving_window_container);
+				clutter_actor_reparent (moving_actor, static_windows);
 			}
 
 			var to_has_fullscreened = false;
 			var from_has_fullscreened = false;
 			var docks = new List<WindowActor> ();
 
-			foreach (var window in windows) {
-				var meta_window = window.get_meta_window ();
-
-				if (!meta_window.showing_on_its_workspace () ||
-					moving != null && window == moving_actor)
+			foreach (var actor in Compositor.get_window_actors (screen)) {
+				if (actor.is_destroyed ())
 					continue;
 
-				if (meta_window.get_workspace () == wp_from) {
-					win.append (window);
-					par.append (window.get_parent ());
-					clutter_actor_reparent (window, out_group);
-					if (meta_window.fullscreen)
+				var window = actor.get_meta_window ();
+
+				if (!window.showing_on_its_workspace () ||
+					(move_primary_only && window.get_monitor () != primary) ||
+					(moving != null && window == moving))
+					continue;
+
+				if (window.is_on_all_workspaces ()) {
+					// only collect docks here that need to be displayed on both workspaces
+					// all other windows will be collected below
+					if (window.window_type == WindowType.DOCK) {
+						docks.append (actor);
+					} else {
+						// windows that are on all workspaces will be faded out and back in
+						windows.append (actor);
+						parents.append (actor.get_parent ());
+						clutter_actor_reparent (actor, static_windows);
+
+						actor.save_easing_state ();
+						actor.set_easing_duration (300);
+						actor.opacity = 0;
+						actor.restore_easing_state ();
+					}
+
+					continue;
+				}
+
+				if (window.get_workspace () == workspace_from) {
+					windows.append (actor);
+					parents.append (actor.get_parent ());
+					clutter_actor_reparent (actor, out_group);
+
+					if (window.fullscreen)
 						from_has_fullscreened = true;
-				} else if (meta_window.get_workspace () == wp_to) {
-					win.append (window);
-					par.append (window.get_parent ());
-					clutter_actor_reparent (window, in_group);
-					if (meta_window.fullscreen)
+
+				} else if (window.get_workspace () == workspace_to) {
+					windows.append (actor);
+					parents.append (actor.get_parent ());
+					clutter_actor_reparent (actor, in_group);
+
+					if (window.fullscreen)
 						to_has_fullscreened = true;
-				} else if (meta_window.window_type == WindowType.DOCK) {
-					docks.append (window);
+
 				}
 			}
 
@@ -968,99 +1177,144 @@ namespace Gala
 			// work, mutter probably reverts the order internally to match
 			// the display stack
 			foreach (var window in docks) {
-				win.append (window);
-				par.append (window.get_parent ());
+				if (!to_has_fullscreened) {
+					var clone = new InternalUtils.SafeWindowClone (window.get_meta_window ());
+					clone.x = window.x;
+					clone.y = window.y;
 
-				var clone = new Clutter.Clone (window);
-				clone.x = window.x;
-				clone.y = window.y;
-
-				clones.append (clone);
-				if (!to_has_fullscreened)
 					in_group.add_child (clone);
-				if (!from_has_fullscreened)
+					tmp_actors.append (clone);
+				}
+
+				if (!from_has_fullscreened) {
+					windows.append (window);
+					parents.append (window.get_parent ());
+
 					clutter_actor_reparent (window, out_group);
+				}
 			}
 
-			// monitor the workspaces to see whether a window was removed
-			// in which case we need to stop the clones from drawing
-			// we monitor every workspace here because finding the ones a
-			// particular dock belongs to did not seem reliable enough
-			foreach (var workspace in screen.get_workspaces ()) {
-				workspace.window_removed.connect (watch_window);
-			}
+			main_container.clip_to_allocation = true;
+			main_container.x = move_primary_only ? monitor_geom.x : 0;
+			main_container.y = move_primary_only ? monitor_geom.x : 0;
+			main_container.width = move_primary_only ? monitor_geom.width : screen_width;
+			main_container.height = move_primary_only ? monitor_geom.height : screen_height;
 
-			in_group.set_position (-x2, -y2);
-			group.set_child_above_sibling (in_group, null);
-			if (moving_window_container != null)
-				group.set_child_above_sibling (moving_window_container, null);
+			var x2 = move_primary_only ? monitor_geom.width : screen_width;
+			if (direction == MotionDirection.RIGHT)
+				x2 = -x2;
+
+			out_group.x = 0;
+			wallpaper.x = 0;
+			in_group.x = -x2;
+			wallpaper_clone.x = -x2;
 
 			in_group.clip_to_allocation = out_group.clip_to_allocation = true;
-			in_group.width = out_group.width = w;
-			in_group.height = out_group.height = h;
+			in_group.width = out_group.width = move_primary_only ? monitor_geom.width : screen_width;
+			in_group.height = out_group.height = move_primary_only ? monitor_geom.height : screen_height;
 
 			var animation_duration = AnimationSettings.get_default ().workspace_switch_duration;
 			var animation_mode = Clutter.AnimationMode.EASE_OUT_CUBIC;
 
-			out_group.animate (animation_mode, animation_duration, x : x2, y : y2);
-			in_group.animate (animation_mode, animation_duration, x : 0.0f, y : 0.0f).completed.connect (() => {
+			out_group.set_easing_mode (animation_mode);
+			out_group.set_easing_duration (animation_duration);
+			in_group.set_easing_mode (animation_mode);
+			in_group.set_easing_duration (animation_duration);
+			wallpaper_clone.set_easing_mode (animation_mode);
+			wallpaper_clone.set_easing_duration (animation_duration);
+
+			wallpaper.save_easing_state ();
+			wallpaper.set_easing_mode (animation_mode);
+			wallpaper.set_easing_duration (animation_duration);
+
+			out_group.x = x2;
+			in_group.x = move_primary_only ? monitor_geom.x : 0;
+
+			wallpaper.x = x2;
+			wallpaper_clone.x = move_primary_only ? monitor_geom.x : 0;
+			wallpaper.restore_easing_state ();
+
+			var transition = in_group.get_transition ("x");
+			if (transition != null)
+				transition.completed.connect (end_switch_workspace);
+			else
 				end_switch_workspace ();
-			});
-			wallpaper.animate (animation_mode, animation_duration, x : (x2 < 0 ? -w : w));
-			wallpaper_clone.animate (animation_mode, animation_duration, x : 0.0f);
 		}
 
 		void end_switch_workspace ()
 		{
-			if (win == null || par == null)
+			if (windows == null || parents == null)
 				return;
 
 			var screen = get_screen ();
-			var display = screen.get_display ();
+			var active_workspace = screen.get_active_workspace ();
 
-			for (var i=0;i<win.length ();i++) {
-				var window = win.nth_data (i);
+			for (var i = 0; i < windows.length (); i++) {
+				var actor = windows.nth_data (i);
+
+				// to maintain the correct order of monitor, we need to insert the Background
+				// back manually
+#if HAS_MUTTER314
+				if (actor is BackgroundManager) {
+					var background = (BackgroundManager) actor;
+#else
+				if (actor is Background) {
+					var background = (Background) actor;
+#endif
+
+					background.get_parent ().remove_child (background);
+#if HAS_MUTTER314
+					background_group.insert_child_at_index (background, background.monitor_index);
+#else
+					background_group.insert_child_at_index (background, background.monitor);
+#endif
+					background.x = background.steal_data<int> ("prev-x");
+					continue;
+#if HAS_MUTTER314
+				} else if (actor is Meta.BackgroundGroup) {
+#else
+				} else if (actor is BackgroundManager) {
+#endif
+					actor.x = 0;
+					// thankfully mutter will take care of stacking it at the right place for us
+					clutter_actor_reparent (actor, window_group);
+					continue;
+				}
+
+				var window = actor as WindowActor;
+
+				if (window == null || !window.is_destroyed ())
+					clutter_actor_reparent (actor, parents.nth_data (i));
+
 				if (window == null || window.is_destroyed ())
 					continue;
 
-				if (window.get_parent () == out_group) {
-					clutter_actor_reparent (window, par.nth_data (i));
+				var meta_window = window.get_meta_window ();
+				if (meta_window.get_workspace () != active_workspace
+					&& !meta_window.is_on_all_workspaces ())
 					window.hide ();
-				} else
-					clutter_actor_reparent (window, par.nth_data (i));
-			}
 
-			foreach (var workspace in screen.get_workspaces ()) {
-				workspace.window_removed.disconnect (watch_window);
-			}
-
-			if (clones != null) {
-				foreach (var clone in clones) {
-					clone.destroy ();
+				// some static windows may have been faded out
+				if (actor.opacity < 255) {
+					actor.save_easing_state ();
+					actor.set_easing_duration (300);
+					actor.opacity = 255;
+					actor.restore_easing_state ();
 				}
-				clones = null;
 			}
 
-			win = null;
-			par = null;
+			if (tmp_actors != null) {
+				foreach (var actor in tmp_actors) {
+					actor.destroy ();
+				}
+				tmp_actors = null;
+			}
 
-			if (in_group != null)
-				in_group.destroy ();
-			in_group = null;
-			if (out_group != null)
-				out_group.destroy ();
-			out_group = null;
-			if (moving_window_container != null)
-				moving_window_container.destroy ();
-			moving_window_container = null;
-
-			var wallpaper = background_group;
-			wallpaper.detach_animation ();
-			wallpaper.x = 0.0f;
+			windows = null;
+			parents = null;
+			moving = null;
 
 			switch_workspace_completed ();
-
-			moving = null;
 		}
 
 		public override void kill_switch_workspace ()
@@ -1075,10 +1329,39 @@ namespace Gala
 
 		public override bool keybinding_filter (Meta.KeyBinding binding)
 		{
-			// for now we'll just block all keybindings if we're in modal mode,
-			// do something useful with this later
-			return modal_count > 0;
+			if (!is_modal ())
+				return false;
+
+			var modal_proxy = modal_stack.peek_head ();
+
+			return (modal_proxy != null
+				&& modal_proxy.keybinding_filter != null
+				&& modal_proxy.keybinding_filter (binding));
 		}
+
+#if HAS_MUTTER310
+		public override void confirm_display_change ()
+		{
+			var pid = Util.show_dialog ("--question",
+				_("Does the display look OK?"),
+				"30",
+				null,
+				_("Keep This Configuration"),
+				_("Restore Previous Configuration"),
+				"preferences-desktop-display",
+				0,
+				null, null);
+
+			ChildWatch.add (pid, (pid, status) => {
+				var ok = false;
+				try {
+					ok = Process.check_exit_status (status);
+				} catch (Error e) {}
+
+				complete_display_change (ok);
+			});
+		}
+#endif
 
 		public override unowned Meta.PluginInfo? plugin_info ()
 		{

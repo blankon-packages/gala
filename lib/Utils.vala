@@ -20,14 +20,16 @@ namespace Gala
 	public class Utils
 	{
 		// Cache xid:pixbuf and icon:pixbuf pairs to provide a faster way aquiring icons
-		static Gee.HashMap<string, Gdk.Pixbuf> xid_pixbuf_cache;
-		static Gee.HashMap<string, Gdk.Pixbuf> icon_pixbuf_cache;
+		static HashTable<string, Gdk.Pixbuf> xid_pixbuf_cache;
+		static HashTable<string, Gdk.Pixbuf> icon_pixbuf_cache;
 		static uint cache_clear_timeout = 0;
+
+		static Gdk.Pixbuf? close_pixbuf = null;
 
 		static construct
 		{
-			xid_pixbuf_cache = new Gee.HashMap<string, Gdk.Pixbuf> ();
-			icon_pixbuf_cache = new Gee.HashMap<string, Gdk.Pixbuf> ();
+			xid_pixbuf_cache = new HashTable<string, Gdk.Pixbuf> (str_hash, str_equal);
+			icon_pixbuf_cache = new HashTable<string, Gdk.Pixbuf> (str_hash, str_equal);
 		}
 
 		/**
@@ -35,25 +37,31 @@ namespace Gala
 		 */
 		static void clean_icon_cache (uint32[] xids)
 		{
-			var list = xid_pixbuf_cache.keys.to_array ();
-			var pixbuf_list = icon_pixbuf_cache.values.to_array ();
-			var icon_list = icon_pixbuf_cache.keys.to_array ();
+			var list = xid_pixbuf_cache.get_keys ();
+			var pixbuf_list = icon_pixbuf_cache.get_values ();
+			var icon_list = icon_pixbuf_cache.get_keys ();
 
 			foreach (var xid_key in list) {
 				var xid = (uint32)uint64.parse (xid_key.split ("::")[0]);
 				if (!(xid in xids)) {
 					var pixbuf = xid_pixbuf_cache.get (xid_key);
-					for (var j = 0; j < pixbuf_list.length; j++) {
-						if (pixbuf_list[j] == pixbuf) {
-							xid_pixbuf_cache.unset (icon_list[j]);
+					for (var j = 0; j < pixbuf_list.length (); j++) {
+						if (pixbuf_list.nth_data (j) == pixbuf) {
+							xid_pixbuf_cache.remove (icon_list.nth_data (j));
 						}
 					}
 
-					xid_pixbuf_cache.unset (xid_key);
+					xid_pixbuf_cache.remove (xid_key);
 				}
 			}
 		}
 
+		/**
+		 * Marks the given xids as no longer needed, the corresponding icons
+		 * may be freed now. Mainly for internal purposes.
+		 *
+		 * @param xids The xids of the window that no longer need icons
+		 */
 		public static void request_clean_icon_cache (uint32[] xids)
 		{
 			if (cache_clear_timeout > 0)
@@ -70,20 +78,141 @@ namespace Gala
 		}
 
 		/**
-		 * returns a pixbuf for the application of this window or a default icon
-		 **/
-		public static Gdk.Pixbuf get_icon_for_window (Meta.Window window, int size)
+		 * Creates a new GtkClutterTexture with an icon for the window at the given size.
+		 * This is recommended way to grab an icon for a window as this method will make
+		 * sure the icon is updated if it becomes available at a later point.
+		 */
+		public class WindowIcon : GtkClutter.Texture
+		{
+			static Bamf.Matcher matcher;
+
+			static construct
+			{
+				matcher = Bamf.Matcher.get_default ();
+			}
+
+			public Meta.Window window { get; construct; }
+			public int icon_size { get; construct; }
+
+			/**
+			 * If set to true, the SafeWindowClone will destroy itself when the connected
+			 * window is unmanaged
+			 */
+			public bool destroy_on_unmanaged {
+				get {
+					return _destroy_on_unmanaged;
+				}
+				construct set {
+					if (_destroy_on_unmanaged == value)
+						return;
+
+					_destroy_on_unmanaged = value;
+					if (_destroy_on_unmanaged)
+						window.unmanaged.connect (unmanaged);
+					else
+						window.unmanaged.disconnect (unmanaged);
+				}
+			}
+
+			bool _destroy_on_unmanaged = false;
+			bool loaded = false;
+			uint32 xid;
+
+			/**
+			 * Creates a new WindowIcon
+			 *
+			 * @param window               The window for which to create the icon
+			 * @param icon_size            The size of the icon in pixels
+			 * @param destroy_on_unmanaged @see destroy_on_unmanaged
+			 */
+			public WindowIcon (Meta.Window window, int icon_size, bool destroy_on_unmanaged = false)
+			{
+				Object (window: window,
+						icon_size: icon_size,
+						destroy_on_unmanaged: destroy_on_unmanaged);
+			}
+
+			construct
+			{
+				width = icon_size;
+				height = icon_size;
+				xid = (uint32) window.get_xwindow ();
+
+				// new windows often reach mutter earlier than bamf, that's why
+				// we have to wait until the next window opens and hope that it's
+				// ours so we can get a proper icon instead of the default fallback.
+				var app = matcher.get_application_for_xid (xid);
+				if (app == null)
+					matcher.view_opened.connect (retry_load);
+				else
+					loaded = true;
+
+				update_texture (true);
+			}
+
+			~WindowIcon ()
+			{
+				if (!loaded)
+					matcher.view_opened.disconnect (retry_load);
+			}
+
+			void retry_load (Bamf.View view)
+			{
+				var app = matcher.get_application_for_xid (xid);
+
+				// retry only once
+				loaded = true;
+				matcher.view_opened.disconnect (retry_load);
+
+				if (app == null)
+					return;
+
+				update_texture (false);
+			}
+
+			void update_texture (bool initial)
+			{
+				var pixbuf = get_icon_for_xid (xid, icon_size, !initial);
+
+				try {
+					set_from_pixbuf (pixbuf);
+				} catch (Error e) {}
+			}
+
+			void unmanaged (Meta.Window window)
+			{
+				destroy ();
+			}
+		}
+
+		/**
+		 * Returns a pixbuf for the application of this window or a default icon
+		 *
+		 * @param window       The window to get an icon for
+		 * @param size         The size of the icon
+		 * @param ignore_cache Should not be necessary in most cases, if you care about the icon
+		 *                     being loaded correctly, you should consider using the WindowIcon class
+		 */
+		public static Gdk.Pixbuf get_icon_for_window (Meta.Window window, int size, bool ignore_cache = false)
+		{
+			return get_icon_for_xid ((uint32)window.get_xwindow (), size, ignore_cache);
+		}
+
+		/**
+		 * Returns a pixbuf for a given xid or a default icon
+		 *
+		 * @see get_icon_for_window
+		 */
+		public static Gdk.Pixbuf get_icon_for_xid (uint32 xid, int size, bool ignore_cache = false)
 		{
 			Gdk.Pixbuf? result = null;
-
-			var xid = (uint32)window.get_xwindow ();
 			var xid_key = "%u::%i".printf (xid, size);
 
-			if ((result = xid_pixbuf_cache.get (xid_key)) != null)
+			if (!ignore_cache && (result = xid_pixbuf_cache.get (xid_key)) != null)
 				return result;
 
 			var app = Bamf.Matcher.get_default ().get_application_for_xid (xid);
-			result = get_icon_for_application (app, size);
+			result = get_icon_for_application (app, size, ignore_cache);
 
 			xid_pixbuf_cache.set (xid_key, result);
 
@@ -91,9 +220,12 @@ namespace Gala
 		}
 
 		/**
-		 * returns a pixbuf for this application or a default icon
-		 **/
-		public static Gdk.Pixbuf get_icon_for_application (Bamf.Application app, int size)
+		 * Returns a pixbuf for this application or a default icon
+		 *
+		 * @see get_icon_for_window
+		 */
+		static Gdk.Pixbuf get_icon_for_application (Bamf.Application? app, int size,
+			bool ignore_cache = false)
 		{
 			Gdk.Pixbuf? image = null;
 			bool not_cached = false;
@@ -107,7 +239,7 @@ namespace Gala
 					if (appinfo != null) {
 						icon = Plank.Drawing.DrawingService.get_icon_from_gicon (appinfo.get_icon ());
 						icon_key = "%s::%i".printf (icon, size);
-						if ((image = icon_pixbuf_cache.get (icon_key)) == null) {
+						if (ignore_cache || (image = icon_pixbuf_cache.get (icon_key)) == null) {
 							image = Plank.Drawing.DrawingService.load_icon (icon, size, size);
 							not_cached = true;
 						}
@@ -151,9 +283,13 @@ namespace Gala
 		}
 
 		/**
-		 * get the next window that should be active on a workspace right now
-		 **/
-		public static Meta.Window get_next_window (Meta.Workspace workspace, bool backward=false)
+		 * Get the next window that should be active on a workspace right now. Based on
+		 * stacking order
+		 *
+		 * @param workspace The workspace on which to find the window
+		 * @param backward  Whether to get the previous one instead
+		 */
+		public static Meta.Window get_next_window (Meta.Workspace workspace, bool backward = false)
 		{
 			var screen = workspace.get_screen ();
 			var display = screen.get_display ();
@@ -163,7 +299,7 @@ namespace Gala
 #else
 			var window = display.get_tab_next (Meta.TabList.NORMAL, screen,
 #endif
-				screen.get_active_workspace (), null, backward);
+				workspace, null, backward);
 
 			if (window == null)
 #if HAS_MUTTER314
@@ -176,8 +312,11 @@ namespace Gala
 		}
 
 		/**
-		 * get the number of toplevel windows on a workspace
-		 **/
+		 * Get the number of toplevel windows on a workspace excluding those that are
+		 * on all workspaces
+		 *
+		 * @param workspace The workspace on which to count the windows
+		 */
 		public static uint get_n_windows (Meta.Workspace workspace)
 		{
 			var n = 0;
@@ -193,30 +332,12 @@ namespace Gala
 			return n;
 		}
 
-		static Gtk.CssProvider fallback_style = null;
-
-		public static Gtk.CssProvider get_default_style ()
-		{
-			if (fallback_style == null) {
-				fallback_style = new Gtk.CssProvider ();
-				try {
-					fallback_style.load_from_path (Config.PKGDATADIR + "/gala.css");
-				} catch (Error e) { warning (e.message); }
-			}
-
-			return fallback_style;
-		}
-
-		public static void get_window_frame_offset (Meta.Window window, out float x, out float y, out float width, out float height)
-		{
-			var actor = window.get_compositor_private () as Clutter.Actor;
-			var frame = window.get_outer_rect ();
-			x = actor.x - frame.x;
-			y = actor.y - frame.y;
-			width = actor.width - frame.width;
-			height = actor.height - frame.height;
-		}
-
+		/**
+		 * Ring the system bell, will most likely emit a <beep> error sound or, if the
+		 * audible bell is disabled, flash the screen
+		 *
+		 * @param screen The screen to flash, if necessary
+		 */
 		public static void bell (Meta.Screen screen)
 		{
 			if (Meta.Prefs.bell_is_audible ())
@@ -226,7 +347,54 @@ namespace Gala
 		}
 
 		/**
-		 * Plank DockTheme
+		 * Returns the pixbuf that is used for close buttons throughout gala at a
+		 * size of 36px
+		 *
+		 * @return the close button pixbuf or null if it failed to load
+		 */
+		public static Gdk.Pixbuf? get_close_button_pixbuf ()
+		{
+			if (close_pixbuf == null) {
+				try {
+					close_pixbuf = new Gdk.Pixbuf.from_file (Config.PKGDATADIR + "/close.png");
+				} catch (Error e) {
+					warning (e.message);
+					return null;
+				}
+			}
+
+			return close_pixbuf;
+		}
+
+		/**
+		 * Creates a new reactive ClutterActor at 36px with the close pixbuf
+		 *
+		 * @return The close button actor
+		 */
+		public static GtkClutter.Texture create_close_button ()
+		{
+			var texture = new GtkClutter.Texture ();
+			var pixbuf = get_close_button_pixbuf ();
+
+			texture.reactive = true;
+			texture.set_size (36, 36);
+
+			if (pixbuf != null) {
+				try {
+					texture.set_from_pixbuf (pixbuf);
+				} catch (Error e) {}
+			} else {
+				// we'll just make this red so there's at least something as an 
+				// indicator that loading failed. Should never happen and this
+				// works as good as some weird fallback-image-failed-to-load pixbuf
+				texture.background_color = { 255, 0, 0, 255 };
+			}
+
+			return texture;
+		}
+
+		/**
+		 * Provides access to a PlankDrawingDockTheme and PlankDockPrefereces
 		 */
 		public class DockThemeManager : Object
 		{
@@ -238,7 +406,9 @@ namespace Gala
 
 			DockThemeManager ()
 			{
-				dock_settings = new Plank.DockPreferences.with_filename (Environment.get_user_config_dir () + "/plank/dock1/settings");
+				var file = Environment.get_user_config_dir () + "/plank/dock1/settings";
+
+				dock_settings = new Plank.DockPreferences.with_filename (file);
 				dock_settings.notify["Theme"].connect (load_dock_theme);
 			}
 

@@ -1,31 +1,6 @@
-gala (0.1.0~r381+pkg23~ubuntu14.10.1+blankon3) tambora; urgency=medium
+gala (0.1.0~r429+pkg29~ubuntu1) tambora; urgency=low
 
-  * debian/control:
-    - change libmutter-dev (>= 3.8.0) to libmutter-dev (>= 3.14.0)
+  * New upstream release
+    - Support for mutter >= 3.13.91
 
- -- mijortsa <azis.astrojim@surabaya.di.blankon.in>  Wed, 01 Oct 2014 22:47:11 +0700
-
-gala (0.1.0~r381+pkg23~ubuntu14.10.1+blankon2) tambora; urgency=medium
-
-  * org.pantheon.desktop.gala.gschema button-layout :
-    - :minimize,maximize,close
-
- -- mijortsa <azis.astrojim@surabaya.di.blankon.in>  Tue, 17 Jun 2014 20:06:55 +0700
-
-gala (0.1.0~r381+pkg23~ubuntu14.10.1+blankon1) tambora; urgency=medium
-
-  * Initial release
-
- -- mijortsa <azis.astrojim@surabaya.di.blankon.in>  Mon, 16 Jun 2014 19:53:30 +0700
-
-gala (0.1.0~r381+pkg23~ubuntu14.10.1) utopic; urgency=low
-
-  * Auto build.
-
- -- Launchpad Package Builder <noreply@launchpad.net>  Tue, 03 Jun 2014 19:33:54 +0000
-
-gala (0.1) UNRELEASED; urgency=low
-
-  * Initial release.
-
- -- Sergey "Shnatsel" Davidoff <shnatsel@gmail.com>  Wed, 23 May 2012 16:19:58 +0400
+ -- Mahyuddin <yudi.al@gmail.com>  Sat, 10 Jan 2015 21:47:03 +0700
