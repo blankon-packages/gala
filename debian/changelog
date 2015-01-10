@@ -1,3 +1,9 @@
+gala (0.1.0~r429+pkg29blankon3) tambora; urgency=low
+
+  * Rebuild
+
+ -- Mahyuddin <yudi.al@gmail.com>  Sat, 10 Jan 2015 22:34:55 +0700
+
 gala (0.1.0~r429+pkg29~blankon2) tambora; urgency=low
 
   * Bump version libmutter-dev >=3.13.91 
