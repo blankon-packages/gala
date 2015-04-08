@@ -26,7 +26,7 @@ namespace Gala
 
 		public WindowManager wm { get; construct; }
 
-		Utils.WindowIcon? current_window = null;
+		WindowIcon? current_window = null;
 
 		Actor window_clones;
 		List<Actor> clone_sort_order;
@@ -276,7 +276,7 @@ namespace Gala
 		}
 
 		bool clicked_icon (Clutter.ButtonEvent event) {
-			unowned Utils.WindowIcon icon = (Utils.WindowIcon) event.source;
+			unowned WindowIcon icon = (WindowIcon) event.source;
 
 			if (current_window != icon) {
 				current_window = icon;
@@ -306,9 +306,9 @@ namespace Gala
 			}
 
 			if (actor == current_window) {
-				current_window = (Utils.WindowIcon) current_window.get_next_sibling ();
+				current_window = (WindowIcon) current_window.get_next_sibling ();
 				if (current_window == null)
-					current_window = (Utils.WindowIcon) dock.get_first_child ();
+					current_window = (WindowIcon) dock.get_first_child ();
 
 				dim_windows ();
 			}
@@ -329,6 +329,7 @@ namespace Gala
 			close (wm.get_screen ().get_display ().get_current_time ());
 		}
 
+		[CCode (instance_pos = -1)]
 		public void handle_switch_windows (Display display, Screen screen, Window? window,
 #if HAS_MUTTER314
 			Clutter.KeyEvent event, KeyBinding binding)
@@ -428,11 +429,8 @@ namespace Gala
 			closing = true;
 			last_switch = 0;
 
-			var screen = wm.get_screen ();
-			var workspace = screen.get_active_workspace ();
-
 			foreach (var actor in clone_sort_order) {
-				unowned InternalUtils.SafeWindowClone clone = (InternalUtils.SafeWindowClone) actor;
+				unowned SafeWindowClone clone = (SafeWindowClone) actor;
 
 				// current window stays on top
 				if (clone.window == current_window.window)
@@ -493,7 +491,7 @@ namespace Gala
 				close_cleanup ();
 		}
 
-		Utils.WindowIcon? add_window (Window window)
+		WindowIcon? add_window (Window window)
 		{
 			var actor = window.get_compositor_private () as WindowActor;
 			if (actor == null)
@@ -501,13 +499,13 @@ namespace Gala
 
 			actor.hide ();
 
-			var clone = new InternalUtils.SafeWindowClone (window, true);
+			var clone = new SafeWindowClone (window, true);
 			clone.x = actor.x;
 			clone.y = actor.y;
 
 			window_clones.add_child (clone);
 
-			var icon = new Utils.WindowIcon (window, dock_settings.IconSize, true);
+			var icon = new WindowIcon (window, dock_settings.IconSize, true);
 			icon.reactive = true;
 			icon.opacity = 100;
 			icon.x_expand = true;
@@ -526,7 +524,7 @@ namespace Gala
 			var window_opacity = (int) Math.floor (AppearanceSettings.get_default ().alt_tab_window_opacity * 255);
 
 			foreach (var actor in window_clones.get_children ()) {
-				unowned InternalUtils.SafeWindowClone clone = (InternalUtils.SafeWindowClone) actor;
+				unowned SafeWindowClone clone = (SafeWindowClone) actor;
 
 				actor.save_easing_state ();
 				actor.set_easing_duration (250);
@@ -545,7 +543,7 @@ namespace Gala
 			}
 
 			foreach (var actor in dock.get_children ()) {
-				unowned Utils.WindowIcon icon = (Utils.WindowIcon) actor;
+				unowned WindowIcon icon = (WindowIcon) actor;
 				icon.save_easing_state ();
 				icon.set_easing_duration (100);
 				icon.set_easing_mode (AnimationMode.LINEAR);
@@ -602,7 +600,7 @@ namespace Gala
 			clone_sort_order = window_clones.get_children ().copy ();
 
 			if (current_window == null)
-				current_window = (Utils.WindowIcon) dock.get_child_at_index (0);
+				current_window = (WindowIcon) dock.get_child_at_index (0);
 
 			// hide the others
 			foreach (var actor in Compositor.get_window_actors (screen)) {
@@ -624,7 +622,7 @@ namespace Gala
 			return true;
 		}
 
-		Utils.WindowIcon next_window (Workspace workspace, bool backward)
+		WindowIcon next_window (Workspace workspace, bool backward)
 		{
 			Actor actor;
 			if (!backward) {
@@ -637,7 +635,7 @@ namespace Gala
 					actor = dock.get_last_child ();
 			}
 
-			return (Utils.WindowIcon) actor;
+			return (WindowIcon) actor;
 		}
 
 		/**

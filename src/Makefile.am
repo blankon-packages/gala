@@ -32,6 +32,7 @@ gala_LDADD = \
 
 gala_VALASOURCES = \
 	DBus.vala \
+	DockThemeManager.vala \
 	DragDropAction.vala \
 	InternalUtils.vala \
 	Main.vala \
@@ -47,12 +48,15 @@ gala_VALASOURCES = \
 	Widgets/IconGroupContainer.vala \
 	Widgets/MonitorClone.vala \
 	Widgets/MultitaskingView.vala \
+	Widgets/SafeWindowClone.vala \
 	Widgets/WindowClone.vala \
 	Widgets/WindowCloneContainer.vala \
+	Widgets/WindowIconActor.vala \
 	Widgets/WindowMenu.vala \
 	Widgets/WindowOverview.vala \
 	Widgets/WindowSwitcher.vala \
 	Widgets/WorkspaceClone.vala \
+	Widgets/WorkspaceInsertThumb.vala \
 	$(NULL)
 
 gala_background = \
@@ -84,7 +88,7 @@ nodist_gala_SOURCES = \
 	$(gala_VALASOURCES:.vala=.c) \
 	$(NULL)
 
-gala_vala.stamp: $(gala_VALASOURCES)
+gala_vala.stamp: $(gala_VALASOURCES) $(top_builddir)/lib/gala.vapi Makefile
 	$(AM_V_VALA)$(VALAC) \
 		$(gala_VALAFLAGS) \
 		--basedir $(srcdir) \

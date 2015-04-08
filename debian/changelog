@@ -1,18 +1,18 @@
-gala (0.1.0~r429+pkg29blankon3) tambora; urgency=low
-
-  * Rebuild
-
- -- Mahyuddin <yudi.al@gmail.com>  Sat, 10 Jan 2015 22:34:55 +0700
-
-gala (0.1.0~r429+pkg29~blankon2) tambora; urgency=low
-
-  * Bump version libmutter-dev >=3.13.91 
-
- -- Mahyuddin <yudi.al@gmail.com>  Sat, 10 Jan 2015 22:16:26 +0700
-
-gala (0.1.0~r429+pkg29~blankon1) tambora; urgency=low
+gala (0.2.0~r460+pkg31-blankon1) tambora; urgency=low
 
   * New upstream release
-    - Support for mutter >= 3.13.91
+  * Merge from Elementary OS
 
- -- Mahyuddin <yudi.al@gmail.com>  Sat, 10 Jan 2015 21:47:03 +0700
+ -- Mahyuddin <yudi.al@gmail.com>  Wed, 08 Apr 2015 10:45:20 +0700
+
+gala (0.2.0~r460+pkg31~ubuntu15.04.1) vivid; urgency=low
+
+  * Auto build.
+
+ -- Launchpad Package Builder <noreply@launchpad.net>  Mon, 30 Mar 2015 20:32:08 +0000
+
+gala (0.1) UNRELEASED; urgency=low
+
+  * Initial release.
+
+ -- Sergey "Shnatsel" Davidoff <sergey@elementaryos.org>  Wed, 23 May 2012 16:19:58 +0400

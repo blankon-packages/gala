@@ -17,7 +17,7 @@ Build-Depends: debhelper (>= 9),
                libgnome-desktop-3-dev,
                libgranite-dev,
                libgtk-3-dev (>= 3.4.0),
-               libmutter-dev (>= 3.13.91),
+               libmutter-dev (>= 3.8.4),
                libplank-dev (>= 0.3.0),
                valac (>= 0.22.0)
 Standards-Version: 3.9.5
@@ -25,7 +25,10 @@ Homepage: https://launchpad.net/gala
 
 Package: gala
 Architecture: any
-Depends: ${misc:Depends}, ${shlibs:Depends}
+Depends: gsettings-desktop-schemas,
+         libgala0 (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends}
 Provides: x-window-manager
 Description: Pantheon Window Manager
  gala is a window & compositing manager based on libmutter. It manages the
@@ -38,7 +41,9 @@ Package: gala-dbg
 Architecture: any
 Section: debug
 Priority: extra
-Depends: gala (= ${binary:Version}), ${misc:Depends}
+Depends: gala (= ${binary:Version}),
+         libgala0 (= ${binary:Version}),
+         ${misc:Depends}
 Description: Pantheon Window Manager (debugging symbols)
  gala is a window & compositing manager based on libmutter. It manages the
  various windows a user has open.
@@ -47,3 +52,34 @@ Description: Pantheon Window Manager (debugging symbols)
  providing accessibility features like zoom, and more.
  .
  This package contains debugging symbols for gala.
+
+Package: libgala0
+Architecture: any
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Multi-Arch: same
+Description: Library to build plugins for Pantheon Window Manager
+ gala is a window & compositing manager based on libmutter. It manages the
+ various windows a user has open.
+ It takes care of behaviors such as moving windows around, window switching,
+ window overview, animating windows, maximization, multiple workspaces,
+ providing accessibility features like zoom, and more.
+ .
+ This package contains the shared library used for gala.
+
+Package: libgala-dev
+Architecture: any
+Section: libdevel
+Depends: libclutter-gtk-1.0-dev,
+         libgala0 (= ${binary:Version}),
+         libgdk-pixbuf2.0-dev,
+         libglib2.0-dev (>= 2.32),
+         libmutter-dev (>= 3.8.4),
+         ${misc:Depends}
+Description: Library to build plugins for Pantheon Window Manager (development files)
+ gala is a window & compositing manager based on libmutter. It manages the
+ various windows a user has open.
+ It takes care of behaviors such as moving windows around, window switching,
+ window overview, animating windows, maximization, multiple workspaces,
+ providing accessibility features like zoom, and more.
+ .
+ This package contains the development files used for gala.
