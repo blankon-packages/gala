@@ -1,0 +1,18 @@
+diff -Naur gala-0.2.0.460.31.orig/data/gala.css gala-0.2.0.460.31/data/gala.css
+--- gala-0.2.0.460.31.orig/data/gala.css	2015-03-31 03:32:07.000000000 +0700
++++ gala-0.2.0.460.31/data/gala.css	2015-04-10 13:06:09.310910000 +0700
+@@ -19,12 +19,11 @@
+ 
+ .gala-notification {
+ 	box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
+-	background-color: rgb(2434, 2434, 2434);
++	background: rgba(26, 26, 26, 0.98);
+ 	border: 1px solid rgba(0, 0, 0, 0.3);
+ 	border-radius: 4px;
+ }
+ 
+ .gala-notification .title, .gala-notification .label {
+-    color: #333;
++    color: #ccc;
+ }
+-

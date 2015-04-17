@@ -1,3 +1,10 @@
+gala (0.2.0+r460+pkg31-blankon2) tambora; urgency=low
+
+  * debian/patches :
+    - 99_blankon-notify.patch
+
+ -- Mijortsa <azis.astrojim@surabaya.di.blankon.in>  Sat, 18 Apr 2015 05:48:32 +0700
+
 gala (0.2.0+r460+pkg31-blankon1) tambora; urgency=low
 
   * New upstream release
