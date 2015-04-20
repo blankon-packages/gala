@@ -1,3 +1,10 @@
+gala (0.2.0+r460+pkg31-blankon3) tambora; urgency=low
+
+  * 99_blankon-notify.patch 
+    - button layout ':minimize,maximize,close'
+
+ -- Mijortsa <azis.astrojim@surabaya.di.blankon.in>  Tue, 21 Apr 2015 00:26:53 +0700
+
 gala (0.2.0+r460+pkg31-blankon2) tambora; urgency=low
 
   * debian/patches :
