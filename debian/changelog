@@ -1,4 +1,4 @@
-gala (0.2.0~r466+pkg32-blankon1) tambora; urgency=medium
+gala (0.2.0+r466+pkg32-blankon1) tambora; urgency=medium
 
   * New upstream release
   * Re-add blankon patch
