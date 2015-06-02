@@ -1,38 +1,18 @@
-gala (0.2.0+r460+pkg31-blankon4) tambora; urgency=medium
-
-  * Rebuild
-
- -- Syai Mif <syaimif@di.blankon.int>  Mon, 01 Jun 2015 09:57:30 +0700
-
-gala (0.2.0+r460+pkg31-blankon3) tambora; urgency=low
-
-  * 99_blankon-notify.patch 
-    - button layout ':minimize,maximize,close'
-
- -- Mijortsa <azis.astrojim@surabaya.di.blankon.in>  Tue, 21 Apr 2015 00:26:53 +0700
-
-gala (0.2.0+r460+pkg31-blankon2) tambora; urgency=low
-
-  * debian/patches :
-    - 99_blankon-notify.patch
-
- -- Mijortsa <azis.astrojim@surabaya.di.blankon.in>  Sat, 18 Apr 2015 05:48:32 +0700
-
-gala (0.2.0+r460+pkg31-blankon1) tambora; urgency=low
+gala (0.2.0~r466+pkg32-blankon1) tambora; urgency=medium
 
   * New upstream release
-  * Merge from Elementary OS
+  * Re-add blankon patch
 
- -- Mahyuddin <yudi.al@gmail.com>  Wed, 08 Apr 2015 10:45:20 +0700
+ -- Mahyuddin <yudi.al@gmail.com>  Tue, 02 Jun 2015 11:20:31 +0700
 
-gala (0.2.0~r460+pkg31~ubuntu15.04.1) vivid; urgency=low
+gala (0.2.0~r466+pkg32~daily~ubuntu15.10.1) wily; urgency=low
 
   * Auto build.
 
- -- Launchpad Package Builder <noreply@launchpad.net>  Mon, 30 Mar 2015 20:32:08 +0000
+ -- Launchpad Package Builder <noreply@launchpad.net>  Tue, 26 May 2015 11:20:15 +0000
 
-gala (0.1) UNRELEASED; urgency=low
+gala (0.2.0-1) UNRELEASED; urgency=low
 
   * Initial release.
 
- -- Sergey "Shnatsel" Davidoff <sergey@elementaryos.org>  Wed, 23 May 2012 16:19:58 +0400
+ -- Rico Tzschichholz <ricotz@ubuntu.com>  Mon, 30 Mar 2015 22:42:30 +0200
