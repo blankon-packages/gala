@@ -1,3 +1,3 @@
-# bzr-builder format 0.3 deb-version {debupstream}~r466+pkg32~daily
-lp:gala revid:ricotz@ubuntu.com-20150526111807-rryvt6t5mnzyihbb
+# bzr-builder format 0.3 deb-version {debupstream}~r479+pkg32~daily
+lp:gala revid:ricotz@ubuntu.com-20150910121244-7l2wwm0x07ys7t4s
 nest-part packaging lp:~elementary-os/gala/deb-packaging debian debian revid:ricotz@ubuntu.com-20150330204251-p1a4e5jttuop1c13
