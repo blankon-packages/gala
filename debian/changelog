@@ -1,3 +1,9 @@
+gala (0.2.0~r479+pkg32-blankon2) tambora; urgency=medium
+
+  * Rebuild 
+
+ -- Mahyuddin <yudi.al@gmail.com>  Sun, 13 Sep 2015 21:19:11 +0700
+
 gala (0.2.0~r479+pkg32-blankon1) tambora; urgency=medium
 
   * New upstream release
