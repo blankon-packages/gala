@@ -1,3 +1,9 @@
+gala (0.3.0~r484+pkg32-blankon2) tambora; urgency=medium
+
+  * Rebuild 
+
+ -- Rahman Yusri Aftian <aftian@di.blankon.in>  Thu, 30 Jun 2016 23:19:13 +0700
+
 gala (0.3.0~r484+pkg32-blankon1) tambora; urgency=medium
 
   * New upstream release 
